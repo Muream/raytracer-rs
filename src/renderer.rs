@@ -2,7 +2,7 @@ use eframe::epaint::{Color32, ColorImage};
 
 use std::cmp::max;
 
-use crate::{camera::Camera, ray::Ray};
+use crate::{camera::Camera, ray::Ray, scene::Scene};
 
 pub struct Renderer {}
 
@@ -13,7 +13,7 @@ impl Default for Renderer {
 }
 
 impl Renderer {
-    pub fn render(&self, camera: &Camera) -> ColorImage {
+    pub fn render(&self, scene: &Scene, camera: &Camera) -> ColorImage {
         let mut pixels = Vec::new();
 
         // Creating a texture of 0x0px panics
@@ -32,7 +32,7 @@ impl Renderer {
                     direction: ray_direction,
                 };
 
-                pixels.push(self.trace_ray(&ray))
+                pixels.push(self.trace_ray(&scene, &ray))
             }
         }
 
@@ -41,46 +41,65 @@ impl Renderer {
             pixels,
         }
     }
-    pub fn trace_ray(&self, ray: &Ray) -> Color32 {
-        // (bx^2 + by^2 + bz^2)t^2 + (axbx + ayby + azbz)2t + (ax^2 + ay^2 + az^2 - r^2) = 0
-        // where
-        // a = ray origin
-        // b = ray direction
-        // r = sphere radius
-        // t = hit distance
+    pub fn trace_ray(&self, scene: &Scene, ray: &Ray) -> Color32 {
+        let mut closest_sphere = None;
+        let mut closest_t = f32::INFINITY;
+        let color: glm::Vec4;
 
-        let radius = 0.5;
+        for sphere in &scene.spheres {
+            // (bx^2 + by^2 + bz^2)t^2 + (axbx + ayby + azbz)2t + (ax^2 + ay^2 + az^2 - r^2) = 0
+            // where
+            // a = ray origin
+            // b = ray direction
+            // r = sphere radius
+            // t = hit distance
 
-        let a = glm::dot(&ray.direction, &ray.direction);
-        let b = 2.0 * glm::dot(&ray.origin, &ray.direction);
-        let c = glm::dot(&ray.origin, &ray.origin) - radius * radius;
+            let origin = ray.origin - sphere.position;
 
-        // Quadratic formula discriminant:
-        // b^2 - 4ac
-        // (-b +- sqrt(discriminant)) / (2.0 * a)
-        let discriminant = b * b - 4.0 * a * c;
+            let a = glm::dot(&ray.direction, &ray.direction);
+            let b = 2.0 * glm::dot(&origin, &ray.direction);
+            let c = glm::dot(&origin, &origin) - sphere.radius * sphere.radius;
 
-        // The ray missed the sphere, we return a clear color
-        if discriminant < 0.0 {
-            return Color32::BLACK;
+            // Quadratic formula discriminant:
+            // b^2 - 4ac
+            // (-b +- sqrt(discriminant)) / (2.0 * a)
+            let discriminant = b * b - 4.0 * a * c;
+
+            // The ray missed the sphere
+            if discriminant < 0.0 {
+                continue;
+            }
+
+            // let _t0 = (-b + discriminant.sqrt()) / (2.0 * a);
+            let t = (-b - discriminant.sqrt()) / (2.0 * a);
+
+            // The Sphere is behind the camera
+            if t < 0.0 {
+                continue;
+            }
+
+            if t < closest_t {
+                closest_t = t;
+                closest_sphere = Some(sphere);
+            }
         }
 
-        // let _t0 = (-b + discriminant.sqrt()) / (2.0 * a);
-        let closest_t = (-b - discriminant.sqrt()) / (2.0 * a);
+        match closest_sphere {
+            Some(sphere) => {
+                let hit_position = ray.origin - sphere.position + ray.direction * closest_t;
 
-        if closest_t < 0.0 {
-            return Color32::BLACK;
+                let normal = (hit_position).normalize();
+                let light_dir = glm::vec3(-1.0, -1.0, -1.0).normalize();
+
+                let light = f32::max(glm::dot(&normal, &(-light_dir)), 0.0);
+
+                // let sphere_color = normal * 0.5 + glm::vec3(0.5, 0.5, 0.5);
+                color = sphere.material.albedo * light;
+            }
+            None => {
+                color = glm::Vec4::zeros();
+            }
         }
-
-        let hit_position = ray.origin + ray.direction * closest_t;
-
-        let normal = (hit_position).normalize();
-        let light_dir = glm::vec3(-1.0, -1.0, -1.0).normalize();
-
-        let light = f32::max(glm::dot(&normal, &(-light_dir)), 0.0);
-
-        // let sphere_color = normal * 0.5 + glm::vec3(0.5, 0.5, 0.5);
-        let color = glm::vec3(light, light, light);
 
         return Color32::from_rgb(
             (color.x * 255.0) as u8,

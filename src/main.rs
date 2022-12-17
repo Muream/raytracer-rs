@@ -5,9 +5,11 @@ extern crate nalgebra_glm as glm;
 mod camera;
 mod ray;
 mod renderer;
+mod scene;
 
 use camera::Camera;
 use renderer::Renderer;
+use scene::{Scene, Sphere};
 
 use std::time::{Duration, Instant};
 
@@ -28,15 +30,30 @@ fn main() {
 struct MyApp {
     renderer: Renderer,
     camera: Camera,
+    scene: Scene,
     texture: Option<egui::TextureHandle>,
     frame_time: Duration,
 }
 
 impl Default for MyApp {
     fn default() -> Self {
+        let mut scene = Scene::default();
+
+        let mut sphere = Sphere::default();
+        sphere.material.albedo = glm::vec4(0.1, 0.3, 1.0, 0.0);
+        sphere.radius = 2.0;
+        sphere.position = glm::vec3(0.0, 0.0, -5.0);
+        scene.spheres.push(sphere);
+
+        let mut sphere = Sphere::default();
+        sphere.radius = 0.5;
+        sphere.material.albedo = glm::vec4(1.0, 0.0, 1.0, 0.0);
+        scene.spheres.push(sphere);
+
         Self {
             renderer: Renderer::default(),
             camera: Camera::default(),
+            scene: scene,
             texture: None,
             frame_time: Duration::ZERO,
         }
@@ -91,7 +108,7 @@ impl eframe::App for MyApp {
                 self.camera
                     .on_resize(panel_size.x as usize, panel_size.y as usize);
 
-                let img = self.renderer.render(&self.camera);
+                let img = self.renderer.render(&self.scene, &self.camera);
 
                 let texture = self.texture.insert(ctx.load_texture(
                     "eventFrame",
