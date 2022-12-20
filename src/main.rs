@@ -68,6 +68,10 @@ impl eframe::App for MyApp {
             .resizable(true)
             .show(ctx, |ui| {
                 ui.label(format!(
+                    "FPS: {}",
+                    (1.0 / self.frame_time.as_secs_f32()) as usize
+                ));
+                ui.label(format!(
                     "Frame Time: {}ms",
                     self.frame_time.as_secs_f32() * 1000.0
                 ));
